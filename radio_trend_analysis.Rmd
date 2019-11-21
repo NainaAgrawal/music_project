@@ -1,0 +1,579 @@
+---
+title: "Analysis on Top Radio Songs Trends"
+output: 
+  html_document: 
+    df_print: paged
+---
+
+***
+
+> **Columns Description**
+
+"Peak.Rank" -> highest number in the chart the song has peaked. 
+"Rank.lw" -> Rank Last Week
+"Rank.TW" -> Rank This Week
+
+"Artist" -> person who sings the song
+"Title" -> Name of the song
+"Label" -> companies that market recorded music and corresponding videos.
+
+"Wks.On" ->number of weeks the song has been on the Top 40 chart. 
+
+BY SPINS
+"peak" ->highest number of radio plays the song has gotten
+"TW" -> radio spins this week
+"LW" -> radio spins last week
+"Move" -> difference between last week and this week
+
+By DAYPART
+"OVN" -> overnight
+"AMD" -> early morning       
+"MID" -> mid day        
+"PMD" -> afternoon        
+"EVE" -> evening 
+
+"Imp.Mill." -> how many people have listened to the song.   
+"Imp.LW.Mill." -> Impression in last Week
+"Imp.Move." -> impressions movement
+"Imp.Rank." -> impression rank 
+"Imp.Rank.LW" ->  impression rank last week
+
+"StationsOn" -> number of stations a song is on 
+"New.Stations" -> if any song is added to new station
+
+BY MARKETS
+Pop/Adult Contemporary
+"Top.40" -> Contemporary hit radio
+"AC" -> Adult contemporary music
+"Hot.AC" -> Hot adult contemporary
+
+Rock/Alternative/Indie
+"Act.Rock" -> Active Rock
+"Rock" -> Rock Music Market
+"AAA" -> Adult album alternative
+"Alt" -> Alternative
+
+Urban/Rhythmic
+"Rhy" -> Rhythmic      
+"Urban" -> Urban Music Market
+"Urban.AC" -> Urban adult contemporary
+
+Country
+"Country" -> Country Music Market
+
+Christian/Gospel
+"Gospel" -> Gospel Music Market
+
+"Big.Pic" -> Overall Number oFMarkets                   
+
+
+***                                                                   
+
+> **Installing and Loading relevant packages**
+
+```{r}
+require(tidyverse)
+require(dplyr)
+install.packages("tidyr")
+library(tidyr)
+
+install.packages("reshape2")
+library(reshape2)
+
+install.packages("ggplot2")
+library(ggplot2)
+install.packages("ggalt")
+library(ggalt)
+
+install.packages("Rmisc")
+library(Rmisc)  # for multiplot
+
+
+install.packages("corrplot")
+library(corrplot)
+
+# for sentiment analysis
+install.packages("syuzhet")
+library(syuzhet)
+install.packages("tidytext")
+library(tidytext)
+install.packages("textdata")
+library(textdata)
+```
+
+
+# 1. **Data Analysis and Cleaning**
+
+> **Loading our datasets**
+
+```{r}
+m7 <- read.csv("mediabase nov 7.csv", encoding = "UTF-8")
+m11 <- read.csv("Mediabase nov 11.csv", encoding = "UTF-8") 
+```
+
+> **Columns**
+
+```{r}
+colnames(m7)
+dim(m7)
+dim(m11)
+```
+- There are 36 columns in both datasets with similar column names
+
+```{r}
+# viewing a sample from our datasets
+head(m7, 5)
+head(m11, 5)
+```
+
+> **Structure of the Data**
+
+```{r}
+str(m7)
+```
+- Looking at the structure of our dataset, we can see that 
+  - there are certain missing values denoted with hyphens(-), and it needs to be replaced or dropped
+  - certain columns have incorrect data types, that needs to be changed
+
+> **Correct the Data Types**
+
+```{r}
+m7$Rank.lw <- as.integer(as.character(m7$Rank.lw))
+m7$Wks.On <- as.integer(as.character(m7$Wks.On))
+
+m11$Rank.lw <- as.integer(as.character(m11$Rank.lw))
+m11$Wks.On <- as.integer(as.character(m11$Wks.On))
+```
+- The missing values in Rank.lw and Wks.On has been replaced with NA.
+
+> **Let's first replace NA's and hyphens**
+
+- From a general understanding its clearly evident that the hyphen are replaced with NA data points in 'Rank.lw' and 'Wks.On'. We will replace them with 0.
+- And for Label hyphen should be Unknown as we dont want to drop our rows here
+```{r}
+m7$Rank.lw[is.na(m7$Rank.lw)] <- 0
+m7$Wks.On[is.na(m7$Wks.On)] <- 0
+
+m11$Rank.lw[is.na(m11$Rank.lw)] <- 0
+m11$Wks.On[is.na(m11$Wks.On)] <- 0
+
+m7$Label <- gsub('---', "Unknown", m7$Label) # replace hyphens in Label with Unknown
+m11$Label <- gsub('---', "Unknown", m11$Label) # replace hyphens in Label with Unknown
+```
+
+# 2. **Descriptive Statistics**
+
+- Summary of a data gives us the detailed information of all the variables.
+```{r}
+summary(m7)
+```
+
+- Box plot on  "Peak Rank" "Rank.Tw", "Rank.Lw" 
+```{r}
+ggplot(data = melt(m7[c(1:3)], id.vars = NULL), aes(x=variable, y=value)) + geom_boxplot(aes(fill=variable), outlier.alpha = 0.1) + theme(legend.position="none") + coord_flip()
+```
+
+- Box plot on  "Weeks On" 
+```{r}
+ggplot(data = melt(log(m7[c(7)]), id.vars = NULL), aes(x=variable, y=value)) + geom_boxplot(aes(fill=variable), outlier.alpha = 0.1) + theme(legend.position="none") + coord_flip()
+```
+
+- Box plot on spins i.e,  "Peak", "This Week", "Last Week" 
+```{r}
+ggplot(data = melt(log(m7[,c(8:10)]), id.vars = NULL), aes(x = variable, y=value)) + geom_boxplot(aes(fill = variable), outlier.alpha = 0.1) + theme(legend.position = "none") 
+```
+
+- Box plot by daypart i.e, "OVN", "am", "mid", "pm", "eve" 
+```{r}
+ggplot(data = melt(log(m7[,c(12:16)]), id.vars = NULL), aes(x = variable, y = value)) + geom_boxplot(aes(fill = variable), outlier.alpha = 0.1) + theme(legend.position = "none")
+```
+
+- Box plot by "Format-By-Format-rank"
+```{r}
+ggplot(data = melt(log(m7[c(24:36)]), id.vars = NULL), aes(x = variable, y=value)) + geom_boxplot(aes(fill = variable)) + theme(legend.position = "none")
+```
+
+
+> **Correlation between columns**
+
+```{r}
+m7_num <- m7[, -(4:6)] # include every column except 4th, 5th, and 6th
+
+m7_num$Wks.On <- gsub('--', 0, m7_num$Wks.On) # changing hypens to 0
+m7_num$Rank.lw <- gsub('--', 0, m7_num$Rank.lw) # changing hypens to 0
+
+m7_num <- as.data.frame(sapply( m7_num, as.numeric)) # converting all columns to numeric type
+
+m7Cor <- cor(m7_num)
+corrplot(m7Cor,  type = "upper", method = "ellipse", tl.srt = 90, tl.cex = 0.7, tl.col = "red", na.label = ".")
+```
+
+- this plot gives us a correlation between numerical columns, dark blue is higl positive correlation, dark red high negative correlation
+- Consider Wks.On, it is highly dependent on Peak, TW, LW, Imp.Mill, StationsOn etc 
+- Rank.TW is having high negative corelation with StationsOn 
+
+> **Relation between StationsOn and Rank This Week**
+
+```{r}
+ggplot(m11, aes(StationsOn, Rank.TW)) + geom_point() + 
+  geom_count(col="tomato3", show.legend = F)   +
+  labs(y = "Rank", 
+       x = "StationsOn", 
+       title = "Relation between StationsOn and Rank This Week")
+```
+
+- This scatterplot depicts that the better the Rank higher the Number of Stations
+
+
+> **Labels Relation to Peak Votes**
+
+```{r, fig.width = 8, fig.height = 4}
+ggplot(head(m11, 20), aes(Label, Peak)) + geom_boxplot(varwidth = T, fill = "plum") + 
+    labs(title="Box plot : Peak Votes grouped by Labels for top 20 songs Nov11",
+         x = "Labels", y = "Total Peak Votes") +
+theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+
+
+# 3. **Exploratory Analysis**
+
+> **Visualizing Rank change for top 20 songs between nov7 vs nov11**
+
+```{r}
+m11_top20 <- head(m11, 20)
+m11_top20$Title <- factor(m11_top20$Title, levels=as.character(m11_top20$Title))  # for right ordering of the dumbells
+
+gg <- ggplot(m11_top20,aes(x = Rank.lw, xend = Rank.TW, y = Title, group = Title)) + 
+        geom_dumbbell(color = "#a3c4dc", 
+                      colour_x = "red",
+                      colour_xend = "darkBlue",
+                      size = 0.95) +
+        labs(x = NULL, 
+             y = NULL, 
+             title = "Dumbbell Chart : Rank Change between Nov7 to Nov11 for Top 20 Songs") +
+        theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+              plot.background = element_rect(fill = "#f7f7f7"),
+              panel.background = element_rect(fill = "#f7f7f7"),
+              panel.grid.minor = element_blank(),
+              panel.grid.major.y = element_blank(),
+              panel.grid.major.x = element_line(),
+              axis.ticks = element_blank(),
+              legend.position = "top",
+              panel.border = element_blank())
+plot(gg)
+```
+
+- Orange dots depict Nov7 Week, Blue depict Nov11 week.
+
+> **Wks.On vs Imp.Mill for Top 40 songs**
+
+```{r}
+# Scatterplot
+ggplot(head(m11, 40), aes(x = Wks.On, y = Imp.Mill.)) + 
+  geom_point(aes(col = Rank.TW	, size = Imp.Mill.)) + 
+  geom_smooth(method="loess", se = F) + 
+  labs(y = "Imp.Mill", 
+       x = "Wks.On", 
+       title = "Scatterplot : Wks.On Vs Imp.Mil for Top 40 songs")
+```
+
+- As the song stays on for weeks on Top Ranks, their Impression in Millions also increases. Its a linear increase.
+
+
+> **Looking closely at the Artists**
+
+- from looking at both datasets, we can extract the ranking for 3 weeks.
+- first we are going to extract the columns that we are concerned with over here
+```{r}
+m7_1 = m7[c(1, 2, 3, 4, 5, 6, 7)]
+m11_1 = m11[c(1, 2, 3, 4, 5, 6, 7)]
+```
+
+- lets merge these two datasets on Artist and Title column to create a single dataframe
+```{r}
+m_1 = merge(m7_1, m11_1, by = c("Artist","Title", "Label"))
+head(m_1, 5)
+```
+
+- We can see that we now have unnecessary columns in above dataframe, lets drop them
+-- Peak.Rank.x - Drop as we have latest Peak.Rank.y
+-- Rank.TW.x - Drop as we have Rank.lw.y denoting same data
+-- Wks.On.x - Drop as we have Wks.On.y which is latest week
+```{r}
+m_1 = m_1[, -c(4, 6, 7)]
+head(m_1, 5)
+```
+
+- in above dataframe, lets rename the columns to understand them better
+```{r}
+names(m_1)[names(m_1) == 'Rank.lw.x'] <- 'Rnk2wksBack'
+names(m_1)[names(m_1) == 'Rank.lw.y'] <- 'RnkLastWk'
+names(m_1)[names(m_1) == 'Rank.TW.y'] <- 'RnkTW'
+names(m_1)[names(m_1) == 'Peak.Rank.y'] <- 'PeakRnk'
+names(m_1)[names(m_1) == 'Wks.On.y'] <- 'WksOn'
+```
+
+```{r}
+head(m_1, 5) # looking at sample of our new data
+```
+
+> **Artists dominating the Top List**
+
+- Lets determine the artists who have more than one song on this list
+```{r}
+top_artists <- m_1 %>%
+    group_by(Artist)  %>%
+    dplyr::summarise(n_apperance = n()) %>%
+    filter(n_apperance > 1) %>%
+    arrange(desc(n_apperance))
+```
+
+- in order to visualise the list in descending order we do following
+```{r}
+top_artists$Artist <- factor(top_artists$Artist, levels = top_artists$Artist[order(top_artists$n_apperance)])
+```
+
+```{r}
+ggplot(top_artists, aes(x = Artist, y = n_apperance)) +
+    geom_bar(stat = "identity",  fill = "pink2", width = 0.7 ) + 
+    labs(title = "Top Artists", x = "Artists", y = "Number of Apperance in our Top List") +
+    theme(plot.title = element_text(size=15, hjust=-.3, face = "bold"), axis.title = element_text(size=12)) +
+    geom_text(aes(label=n_apperance), hjust = 2, size = 2, color = 'black') +
+    coord_flip()
+```
+
+- So, it seems like Post Malone and Dababy have 6 and 5 different songs on the Top list
+
+> **Top Artists by maximum weeks on Market**
+
+```{r}
+top20_by_wks_on <- m_1 %>%
+group_by(Artist)  %>%
+dplyr::summarise(wks_on = sum(WksOn)) %>%
+arrange(desc(wks_on)) %>%
+top_n(20)
+```
+
+```{r}
+top20_by_wks_on$Artist <- factor(top20_by_wks_on$Artist, levels = top20_by_wks_on$Artist [order(top20_by_wks_on$wks_on)]) # in order to visualise the list in descending order
+```
+
+```{r}
+ggplot(top20_by_wks_on, aes(x = Artist, y = wks_on, color = Artist)) +
+    geom_point(size = 3) + 
+    geom_segment(aes(x = Artist, xend = Artist, y = 0, yend = wks_on)) +
+    labs(title = "Top Artists by Weeks on Top", x = '', y = '') +
+    theme_bw() +
+    theme(legend.position = 'none', plot.title = element_text(size = 17,hjust = -0.7, face = "bold"), axis.title.y = element_text(face = "bold"), axis.title.x = element_text(angle = 120)) +
+    coord_flip()
+```
+
+- Now Post Malone seems to be all on top! If we take the weeks on into consideration, Post Malone still has the top spot. But Lizzo and Shaed leapt forward now.
+
+
+
+> **How did Post Malone’s Songs perform?**
+
+- We would like to see how his songs perform in current rankings.
+```{r}
+post_malone <- m_1 %>% filter(Artist == "POST MALONE")
+
+table_malone <- post_malone %>%
+    group_by(`Title`) %>%
+    dplyr::summarise(Rank = RnkTW) %>%
+    arrange(Rank)
+
+table_malone
+```
+
+- Compare this with top rank this Artist week
+```{r}
+m_1 %>% filter(RnkTW == 1)
+```
+
+```{r}
+capaldi_lewis <- m_1 %>% filter(Artist == "CAPALDI, LEWIS")
+
+table_lewis <- capaldi_lewis %>%
+    group_by(`Title`) %>%
+    dplyr::summarise(Rank = RnkTW) %>%
+    arrange(Rank)
+
+table_lewis
+```
+
+- we can see clearly that Post Malone is really famous compared to Lewis Capaldi.
+
+```{r}
+post_malone
+```
+
+- Lets plot this data 
+
+
+```{r}
+post_malone_1 <- post_malone[c(2, 4, 6, 7)]
+post_malone_1
+```
+
+```{r}
+table_malone_1 <-  melt(post_malone_1, id.vars=c("Title"))
+table_malone_1
+```
+
+
+```{r}
+table_malone_1 %>%
+    ggplot(aes(x = variable, y = value, col = `Title`)) + 
+    geom_point(alpha = 0.7, size = 2.5) +
+    scale_y_reverse(breaks = seq(0, 400, 50)) +
+    labs(title = "Post Malone Songs Movement Per Week", x = "Weeks", y = "Position") +
+    theme_bw() +
+    theme(plot.title = element_text(size = 14, face = "bold")) +
+    theme(legend.title = element_blank())
+```
+
+- we can see there is not much change in the positions in the past weeks for Post Malone
+
+
+
+# 4. **Sentiment analysis**
+
+- We will first find out the overall sentiment via nrc method of syuzhet package. The following code will generate the positive and negative polarity along with associated emotions.
+
+```{r}
+
+songs_titles <- as.data.frame(as.matrix(m11$Title), stringsAsFactors = F)$V1 # extracting only Title by converting column from factor to character data type
+
+#Removing punctations and alphanumeric content
+songs_titles<- gsub('[[:punct:]]+', '', songs_titles) # remove all punctuations
+songs_titles<- gsub("([[:alpha:]])\1+", "", songs_titles)
+songs_titles <- gsub('[[:digit:]]+', '', songs_titles) # remove all digits
+
+songs_titles <- iconv(songs_titles,"WINDOWS-1252","UTF-8") # convert encoding 
+
+# Getting the sentiment value for the lyrics
+title_sentiment <- get_nrc_sentiment((songs_titles))
+```
+
+```{r}
+# Dataframe with cumulative value of the sentiments
+sentimentscores <- data.frame(colSums(title_sentiment[,]))
+
+# Dataframe with sentiment and score as columns
+names(sentimentscores) <- "Score"
+sentimentscores <- cbind("sentiment" = rownames(sentimentscores), sentimentscores)
+rownames(sentimentscores) <- NULL
+```
+
+
+```{r}
+# Plot for the cumulative sentiments
+ggplot(data = sentimentscores, aes(x = sentiment, y = Score))+
+geom_bar(aes(fill = sentiment), stat = "identity")+
+theme(legend.position = "none")+
+xlab("Sentiments") + ylab("Scores")+
+ggtitle("Total sentiment based on scores") +
+theme_minimal() +
+theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+- We can observe most song title have positive sentiment and are joyous
+- Now that we have figured out the overall sentiment scores, we should find out which songs are closely associated with different emotions.
+
+
+```{r}
+m11_1 <- m11
+m11_1$Title <- iconv(m11_1$Title,"WINDOWS-1252","UTF-8") # convert encoding 
+m11_1$Title <- as.character(m11_1$Title)
+m11_1$Title_songs <- m11_1$Title
+
+tidy_lyrics <- m11_1 %>% unnest_tokens(word, Title)
+
+song_sentiment_data <- tidy_lyrics %>% inner_join(get_sentiments("nrc"), by = "word")
+
+head(song_sentiment_data, 5)
+```
+
+
+```{r}
+subset(song_sentiment_data, Top.40 < 20) %>%
+    ggplot(aes(x = sentiment, y = Rank.TW, col = `Title_songs`)) + 
+    geom_point(alpha = 0.7, size = 2.5) +
+    labs(title = "Sentiment for top songs", x = "Sentiments", y = "Position") +
+    theme_bw() +
+    theme(plot.title = element_text(size = 14, face = "bold")) +
+    theme(legend.title = element_blank()) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+> **Rank This Week vs Sentiment**
+
+```{r,  fig.width = 12, fig.height = 10}
+p1 <- ggplot(song_sentiment_data, aes(x = Rank.TW, color = sentiment)) + geom_density(alpha = 0.25) + labs(title = "Rank This Week vs Sentiment", subtitle ="Density plot", x = "Rank This Week")
+p2 <- ggplot(song_sentiment_data, aes(x = Rank.TW, fill = sentiment)) + geom_histogram(alpha = 0.25, bins = 30) + labs(subtitle ="Histogram", x = "Rank This Week")
+p3 <- ggplot(song_sentiment_data, aes(x = sentiment, y = Rank.TW, fill = sentiment)) + geom_boxplot() + labs(subtitle ="Box plot ", x = "Sentiments", y = "Rank This Week") + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+multiplot(p1, p2, p3, cols = 1)
+```
+
+
+
+> **Relationship between Number of weeks and sentiments**
+
+- Lets look at which songs have been at top for most weeks
+```{r}
+top10_by_wks <- song_sentiment_data %>%
+group_by(Title_songs)  %>%
+dplyr::summarise(wks_on = sum(as.numeric(Wks.On))) %>%
+arrange(desc(wks_on)) %>%
+top_n(10)
+```
+
+```{r}
+top10_by_wks$Title_songs <- factor(top10_by_wks$Title_songs, levels = top10_by_wks$Title_songs [order(as.numeric(top10_by_wks$wks_on))]) # in order to visualise the list in descending order
+```
+
+```{r}
+top10_by_wks
+```
+
+
+```{r}
+ggplot(top10_by_wks, aes(x = Title_songs, y = wks_on, color = Title_songs)) +
+    geom_point(size = 3) + 
+    geom_segment(aes(x = Title_songs, xend = Title_songs, y = 0, yend = wks_on)) +
+    labs(title = "Top Songs by Number of Weeks", x = '', y = '') +
+    theme_bw() +
+    theme(legend.position = 'none', plot.title = element_text(size = 17,hjust = -0.7, face = "bold"), axis.title.y = element_text(face = "bold"), axis.title.x = element_text(angle = 120)) +
+    coord_flip()
+```
+
+```{r}
+top10_by_wks_full_df <- merge(top10_by_wks, song_sentiment_data, by= c("Title_songs"))
+```
+
+
+```{r, fig.width = 12, fig.height = 6}
+top10_by_wks_full_df %>% 
+dplyr::count(Title_songs, sentiment, sort = TRUE) %>% 
+group_by(sentiment) %>%
+top_n(n = 5) %>% 
+ggplot(aes(x = reorder(Title_songs, n), y = n, fill = Title_songs)) + 
+geom_bar(stat = "identity", show.legend = FALSE) + 
+facet_wrap(~sentiment, scales = "free") + 
+xlab("Sentiments") + ylab("Scores")+
+ggtitle("Top songs associated with emotions and sentiments") +
+coord_flip() +
+theme_minimal() +
+theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+
+> **Some more analysis we want to look at**
+
+- Relationship b/w Number of weeks and Artists Poplarity, with more weeks popularity should keep on decreasing or increasing
+- do people are more inclined towards love songs - by looking at no. of weeks
+- songs no more in top 500
+- movement of songs who had first week last-to-last week
